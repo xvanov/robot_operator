@@ -1,0 +1,99 @@
+#!/bin/bash
+
+# This script is executed in the docker container to spin up all ROS2 nodes
+
+BB_WS="/home/dev/wall_panels/bb_ws"
+LOG_DIR="/home/dev/wall_panels/bb_ws/bb_logs/robot_launcher"
+LAUNCHER_DIR="src/robot_operation/robot_operation/robot_launcher"
+
+mkdir -p "${LOG_DIR}"
+LOG_FILE="${LOG_DIR}/launch_robots.log"
+
+log_info () {
+	echo "[INFO] $1" >> "$LOG_FILE"
+}
+
+log_error () {
+	echo "[ERROR] $1" >> "$LOG_FILE"
+}
+
+export ROS_DOMAIN_ID=14
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+# shellcheck disable=SC1091
+source "${BB_WS}/install/setup.bash"
+
+# launch robots
+log_info "Launching robots"
+python3 "${BB_WS}/${LAUNCHER_DIR}/robot_launcher.py" --start-up || log_error "Failed to launch robots"
+
+# wait for RVIZ to open, then get its PID
+log_info "Waiting for RVIZ to load"
+RVIZ_PID=
+while [ -z "${RVIZ_PID}" ]; do
+  RVIZ_PID="$(pgrep rviz)" >/dev/null 2>&1
+  sleep 1
+done
+
+# needs to be two because the wmctrl will turn up the search as a hit
+commander_running="0"
+while [ "${commander_running}" -lt "1" ]; do
+	log_info "Commander not running"
+	windows="$(wmctrl -l)"
+	commander_running="$(echo "$windows" | grep -c commander)"
+	sleep 1
+done
+log_info "Commander running"
+wmctrl -r "commander" -b toggle,above || log_error "Failed to make commander on top"
+
+# create a logging directory
+log_info "Creating and cleaning latest logs"
+mkdir -p "${BB_WS}/latest_logs" || log_error "Failed to create latest logs dir"
+rm -rf "${BB_WS}/latest_logs/"* || log_error "Failed to clean latest logs dir"
+
+log_info "Running Application ..."
+while kill -0 "${RVIZ_PID}" >/dev/null 2>&1; do
+  # get the window id for rviz
+  wm_id="$(xdotool search --name "panel_workcell.rviz" | head -1)" || log_error "Failed to get RViz window id"
+  # if the window id is set, screen grab rviz
+  if [ -n "${wm_id}" ]; then
+    import -window "${wm_id}" "${BB_WS}/latest_logs/rviz_screenshot.png" || log_error "Failed to take RViz screenshot"
+  fi
+  sleep 1
+done
+
+# when rviz has closed, stop running the robots
+log_info "Cleaning up robot launcher"
+python3 "${BB_WS}/${LAUNCHER_DIR}/robot_launcher.py" --clean-up || log_error "Failed to clean up robot launcher"
+
+# cleanup the logs and make them available
+cd "${BB_WS}/bb_logs" || exit
+log_info "Copying log files to latest logs"
+# find . -type f -mmin -2 -exec cp -a --parents -t "${BB_WS}/latest_logs" "{}" \+
+# loop over folder and copy the kFiles most recently modified files to latest logs
+kFiles=50
+for folder in ./*; do
+  find "$folder" -mtime -1 -type f -exec stat -c '%Y %n' {} \; | \
+    sort -nr | awk -v kFiles="$kFiles" 'NR==1,NR==kFiles {print $2}' | \
+    xargs cp -a --parents -t "${BB_WS}/latest_logs"
+done
+
+log_info "Copying commander terminal log to latest logs"
+latest_commander_file="$(find "${HOME}/.ros/log" -type f -name 'commander*' -printf '%T@ %P\n' | sort -n | tail -1 | cut -d ' ' -f 2)"
+
+log_info "$latest_commander_file"
+
+if [ -n "${latest_commander_file}" ]; then
+  cp "${HOME}/.ros/log/${latest_commander_file}" "${BB_WS}/latest_logs/robot_launcher/commander_term.log"
+fi
+
+log_info "Trimming latest logs to relevant size"
+# trim robot log files to only contain the last N lines
+for file in "${BB_WS}/latest_logs/robot_launcher/"*; do
+	tail -10000 "$file" > "$file.short"
+	mv "$file.short" "$file"
+done
+
+cd "${BB_WS}" || exit
+log_info "Tarring logs"
+tar cJf  latest_logs.tar.xz ./latest_logs
+mv latest_logs.tar.xz ./latest_logs

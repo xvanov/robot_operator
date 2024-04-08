@@ -1,0 +1,39 @@
+---
+services:
+  operator:
+    container_name: operator
+    build: .
+    network_mode: host
+    volumes:
+    - ./bb_ws:/bb_ws
+    - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    environment:
+    - DISPLAY=host.docker.internal:0
+    - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    - ROS_DOMAIN_ID=${COMPOSE_ROS_DOMAIN_ID}
+    command: ros2 run demo_nodes_cpp listener
+    stdin_open: true
+    tty: true
+
+  husarnet-zenoh-bridge:
+    build: ./husarnet_zenoh
+    container_name: husarnet-zenoh-bridge
+    network_mode: host
+    volumes:
+    - /var/lib/husarnet # persist ip address across docker restarts
+    cap_add:
+    - NET_ADMIN
+    devices:
+    - /dev/net/tun
+    restart: unless-stopped
+    environment:
+      # needed for husarnet
+    - HUSARNET_JOIN_CODE=${COMPOSE_HUSARNET_JOIN_CODE}
+    - HUSARNET_HOSTNAME=${COMPOSE_HUSARNET_HOSTNAME}
+    - HUSARNET_DEBUG=1
+      # needed for zenoh-dds-router
+    - ROS_DISTRO=humble
+    - ROS_DOMAIN_ID=${COMPOSE_ROS_DOMAIN_ID}
+    - BOTBUILT_SERVER_NAME=${COMPOSE_WALL_PANELS_TEAM_NAME}
+    stdin_open: true
+    tty: true

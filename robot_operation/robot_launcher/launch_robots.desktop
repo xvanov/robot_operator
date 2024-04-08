@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Launch Robots
+Comment=Custom script for operating robots
+TryExec=/usr/bin/robot_launcher.sh
+Exec=/usr/bin/robot_launcher.sh
+Icon=/usr/share/pixmaps/botbuilt_icon.png
+Categories=System;
