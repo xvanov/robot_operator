@@ -101,10 +101,11 @@ fi
 
 # Define repository URLs
 REPO_URLS=(
-    "git@bitbucket.org:botbuilt/bb_msgs.git"
-    "git@bitbucket.org:botbuilt/bb_transforms.git"
-    "git@bitbucket.org:botbuilt/utils.git"
-    "git@bitbucket.org:botbuilt/robot_operation.git"
+    "git@github.com:xvanov/stud_detector_interfaces.git"
+    "git@github.com:xvanov/bb_msgs.git"
+    "git@github.com:xvanov/bb_transforms.git"
+    "git@github.com:xvanov/utils.git"
+    "git@github.com:xvanov/robot_operation.git"
     #"git@bitbucket.org:botbuilt/panel_planner.git"
     #"git@bitbucket.org:botbuilt/panel_scheduler.git"
 )
